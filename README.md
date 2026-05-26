@@ -50,6 +50,45 @@ The wrapper uses `plugin/configs/mapecho_nusc_baseline_480_60x30_30e_eval.py`,
 which inherits the official oldsplit config but disables the redundant
 open-mmlab backbone preinitialization before loading the full checkpoint.
 
+## Data Construction Artifacts
+
+Current generated metadata lives under `/data/dj/MapEcho/artifacts/`:
+
+```text
+seed_matching/ccs25_seed_streammapnet_match.csv
+seed_matching/temporal_eligible_metadata_W10_L19.csv
+phase1/phase1_probe_selection.csv
+ccs25_attack_assets/ccs25_attack_asset_index.csv
+ccs25_attack_assets/temporal_eligible_attack_assets_W10_L19.csv
+ccs25_attack_assets/phase1_attack_assets.csv
+```
+
+Rebuild the CCS'25 attack asset index with:
+
+```bash
+/home/dj/.conda/envs/maptr/bin/python scripts/index_ccs25_attack_assets.py \
+  --ccs25-root /home/dj/physical-online-map-attack \
+  --match-csv /data/dj/MapEcho/artifacts/seed_matching/ccs25_seed_streammapnet_match.csv \
+  --temporal-metadata-csv /data/dj/MapEcho/artifacts/seed_matching/temporal_eligible_metadata_W10_L19.csv \
+  --phase1-selection-csv /data/dj/MapEcho/artifacts/phase1/phase1_probe_selection.csv \
+  --out-dir /data/dj/MapEcho/artifacts/ccs25_attack_assets
+```
+
+Run the ETA attack-point coordinate/projection sanity check with:
+
+```bash
+/home/dj/.conda/envs/maptr/bin/python scripts/sanity_attack_point_projection.py \
+  --stream-ann datasets/nuScenes/nuscenes_map_infos_val.pkl \
+  --asset-csv /data/dj/MapEcho/artifacts/ccs25_attack_assets/phase1_attack_assets.csv \
+  --out-dir /data/dj/MapEcho/artifacts/rendering_sanity/attack_point_projection \
+  --attack-objective eta \
+  --source-frame lidar \
+  --max-samples 5 \
+  --offsets=-2,-1,0,1,2,5 \
+  --render-overlays \
+  --render-max-samples 1
+```
+
 ## Notes
 
 - `src/StreamMapNet` was copied from `/home/dj/StreamMapNet` with the Phase 0.5
