@@ -240,6 +240,7 @@ def main():
     write_csv(matched_reductions_csv, matched_reductions, list(matched_reductions[0].keys()))
 
     dump_counts = {}
+    expected_dump_count = len(samples)
     for condition in conditions:
         root = out_root / condition
         dump_counts[condition] = {
@@ -273,7 +274,7 @@ def main():
             row for row in matched_reductions if row["frame_offset"] == 1
         ],
         "pass_dump_counts": all(
-            counts["query"] == 30 and counts["bev"] == 30
+            counts["query"] == expected_dump_count and counts["bev"] == expected_dump_count
             for counts in dump_counts.values()
         ),
     }

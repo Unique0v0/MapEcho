@@ -150,17 +150,66 @@ Purpose:
 Test H1/H3 on a small newsplit-val asymmetric candidate set.
 ```
 
-Data funnel:
+Fast candidate source:
 
 ```text
-NuScenes newsplit val frames
-  -> CCS'25-style asymmetric candidate selection
-  -> temporal eligibility W=10/L=19
-  -> ETA attack-location generation
+source = CCS'25 ccs_asymmetric_dist intermediate stage
+window = W=10, L=9
+pool   = 50 frames / 8 scenes on newsplit val
+```
+
+The stricter `ccs_asymmetric_curvature_selected` and final asymmetric JSON
+stages are too small on newsplit validation after temporal filtering:
+
+```text
+ccs_asymmetric_curvature_selected W10/L9 = 10 frames / 3 scenes
+ccs_final_asymmetric_json W10/L9         = 10 frames / 3 scenes
+```
+
+The broader expansion source is:
+
+```text
+source = CCS'25 ccs_candidate intermediate stage
+window = W=10, L=9
+pool   = 243 frames / 15 scenes on newsplit val
+```
+
+This expansion source requires stronger geometry and visibility filtering.
+
+Phase 1.1 data funnel:
+
+```text
+ccs_asymmetric_dist W10/L9
+  -> infer diverging/reference boundary tags
+  -> generate ETA-like boundary-anchor locations
   -> target-boundary VPA sanity
   -> clean-quality filter
   -> Phase 1.1 mini probe
 ```
+
+Main Phase 1.1 window:
+
+```text
+W=10, L=9
+```
+
+Long-window sensitivity:
+
+```text
+W=10, L=19 when available
+```
+
+Warm-up sensitivity:
+
+```text
+W=5 only after W=10 results are stable
+```
+
+Phase 1.1 should report internal query/pred residue and map-level
+target-boundary residue separately. Phase 1.0 overlap sanity suggests a
+two-level mechanism: query propagation primarily carries immediate query-score
+and predicted-vector residue, while BEV memory dominates map-level
+diverging-boundary geometry residue.
 
 ### Main Experiment
 

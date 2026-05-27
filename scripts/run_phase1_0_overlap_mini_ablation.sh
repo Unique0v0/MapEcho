@@ -7,6 +7,10 @@ STREAM_ANN=${STREAM_ANN:-/home/dj/MapEcho/datasets/nuScenes/nuscenes_map_infos_v
 ASSET_CSV=${ASSET_CSV:-/data/dj/MapEcho/artifacts/ccs25_attack_assets/phase1_attack_assets.csv}
 CONFIG=${CONFIG:-/home/dj/MapEcho/src/StreamMapNet/plugin/configs/mapecho_nusc_newsplit_480_60x30_24e_eval.py}
 CHECKPOINT=${CHECKPOINT:-/home/dj/MapEcho/ckpts/nusc_newsplit_480_60x30_24e.pth}
+SKIP_COMPLETED=${SKIP_COMPLETED:-1}
+WARMUP=${WARMUP:-10}
+RECOVERY=${RECOVERY:-19}
+ATTACK_POWER=${ATTACK_POWER:-3000.0}
 
 cd /home/dj/MapEcho
 
@@ -18,6 +22,19 @@ while IFS= read -r TOKEN; do
   CLEAN_ANN="${ROOT}/anns/clean_sequence_ann.pkl"
   ATTACK_ANN="${ROOT}/anns/attack_sequence_ann.pkl"
 
+  if [[ "${SKIP_COMPLETED}" == "1" ]] \
+    && [[ -f "${ROOT}/phase1_0_clean_keep/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_reset_sanity/reset_all/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_reset_sanity/reset_query/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_reset_sanity/reset_bev/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_attack_reset_ablation/attack_keep/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_attack_reset_ablation/attack_reset_all/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_attack_reset_ablation/attack_reset_query/outputs.pkl" ]] \
+    && [[ -f "${ROOT}/phase1_0_attack_reset_ablation/attack_reset_bev/outputs.pkl" ]]; then
+    echo "[MapEcho] skipping completed token ${TOKEN}"
+    continue
+  fi
+
   echo "[MapEcho] building clean sequence ann for ${TOKEN}"
   /home/dj/.conda/envs/maptr/bin/python scripts/build_sequence_ann_subset.py \
     --stream-ann "${STREAM_ANN}" \
@@ -25,8 +42,8 @@ while IFS= read -r TOKEN; do
     --target-token "${TOKEN}" \
     --out "${CLEAN_ANN}" \
     --summary-out "${ROOT}/anns/clean_sequence_ann_summary.json" \
-    --warmup 10 \
-    --recovery 19
+    --warmup "${WARMUP}" \
+    --recovery "${RECOVERY}"
 
   echo "[MapEcho] building attack-at-t ann for ${TOKEN}"
   /home/dj/.conda/envs/maptr/bin/python scripts/build_attack_at_t_sequence_ann.py \
@@ -35,7 +52,8 @@ while IFS= read -r TOKEN; do
     --out-ann "${ATTACK_ANN}" \
     --out-dir "${ROOT}/attack_assets" \
     --attack-objective eta \
-    --source-frame lidar
+    --source-frame lidar \
+    --power "${ATTACK_POWER}"
 
   cd /home/dj/MapEcho/src/StreamMapNet
   export MPLCONFIGDIR=/tmp/mapecho_matplotlib
