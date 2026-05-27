@@ -770,6 +770,28 @@ glare / blur region 在 target-boundary image region 内的覆盖比例
 
 不是全图面积占比。
 
+VPA sanity 同时报告三类量：
+
+```text
+BEV distance: attack x/y 到 target boundary 的米制距离
+ground-center pixel distance: 光源中心到地面边界投影的像素距离
+glare-region coverage: glare 圆盘覆盖 target-boundary 投影点的比例
+```
+
+其中主判据使用 `glare-region coverage`，而不是单独使用 ground-center pixel distance。原因是 camera-blinding source 有高度，target road boundary 在地面平面；二者的图像中心自然会存在垂直偏移，但 glare/blur 区域仍可覆盖 target-boundary region。
+
+当前 Phase 1 sanity 结果支持该定义：
+
+```text
+ETA, 20 / 20 Phase 1 frames:
+  diverge-boundary VPA pass = 20 / 20
+  reference-boundary VPA    = 0 / 20
+
+RSA subset, 7 / 7 Phase 1 frames:
+  diverge-boundary VPA pass = 7 / 7
+  reference-boundary VPA    = 0 / 7
+```
+
 ## 7.4 Intensity Sensitivity
 
 不声称具体 lumen 是真实物理值。
@@ -782,7 +804,59 @@ Intensity ∈ {low, medium, high}
 
 主实验使用 medium。附录报告 low / high sensitivity。
 
-## 7.5 Patch Attack：Should-have Supplement
+## 7.5 Rendering Injection Smoke Test
+
+正式模型推理前，先进行 raw-image injection smoke test。
+
+检查项：
+
+```text
+1. attack location is rendered on the expected target-boundary region;
+2. warm-up and recovery frames remain clean under N_attack=1;
+3. projected diverging / reference boundary overlays are geometrically aligned;
+4. p_global is constant across frames;
+5. uv, distance, and glare radius change smoothly under ego motion;
+6. injection happens before resize / padding / normalization;
+7. image shape, dtype, and channel order are not corrupted.
+```
+
+当前 ETA smoke test：
+
+```text
+5 Phase 1 samples
+23 visible frame rows over t-2...t+2
+5 attacked frame rows
+N_attack=1 schedule passed
+raw uint8 and shape-unchanged checks passed
+```
+
+若该 smoke test 失败，不进入模型推理；优先修正 rendering / schedule / transform。
+
+## 7.6 Temporal Model Readiness
+
+进入 clean hook sanity 前，必须确认使用的是 temporal StreamMapNet model，而不是 non-streaming baseline。
+
+最低要求：
+
+```text
+config enables streaming query;
+config enables streaming BEV;
+checkpoint contains query temporal weights, e.g. head.query_update;
+checkpoint contains BEV temporal weights, e.g. stream_fusion_neck;
+```
+
+当前 `nusc_baseline_480_60x30_30e.pth` 审计结果：
+
+```text
+config streaming query = false
+config streaming BEV   = false
+checkpoint query temporal weights = absent
+checkpoint BEV temporal weights   = absent
+```
+
+因此该 oldsplit checkpoint 是 non-streaming baseline，不能用于验证 query propagation、BEV memory、ConvGRU gate 或 reset ablation。若强行用 streaming config 加载该 checkpoint，新增 temporal modules 会随机初始化，不可作为主实验结果。
+
+## 7.7 Patch Attack：Should-have Supplement
 
 Patch 不是 one-frame recovery 主线。
 

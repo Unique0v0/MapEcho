@@ -89,6 +89,83 @@ Run the ETA attack-point coordinate/projection sanity check with:
   --render-max-samples 1
 ```
 
+Run target-boundary VPA sanity with:
+
+```bash
+/home/dj/.conda/envs/maptr/bin/python scripts/sanity_target_boundary_vpa.py \
+  --stream-ann datasets/nuScenes/nuscenes_map_infos_val.pkl \
+  --asset-csv /data/dj/MapEcho/artifacts/ccs25_attack_assets/phase1_attack_assets.csv \
+  --out-dir /data/dj/MapEcho/artifacts/rendering_sanity/target_boundary_vpa \
+  --attack-objective eta \
+  --source-frame lidar \
+  --max-samples 20 \
+  --coverage-threshold 0.05 \
+  --render-overlays \
+  --render-max-samples 5
+```
+
+Run raw-image attack rendering injection smoke with:
+
+```bash
+/home/dj/.conda/envs/maptr/bin/python scripts/smoke_attack_rendering_injection.py \
+  --stream-ann datasets/nuScenes/nuscenes_map_infos_val.pkl \
+  --asset-csv /data/dj/MapEcho/artifacts/ccs25_attack_assets/phase1_attack_assets.csv \
+  --out-dir /data/dj/MapEcho/artifacts/rendering_sanity/injection_smoke \
+  --attack-objective eta \
+  --source-frame lidar \
+  --max-samples 5 \
+  --offsets=-2,-1,0,1,2
+```
+
+Before model-level hook sanity, audit whether the selected config/checkpoint is
+actually temporal:
+
+```bash
+/home/dj/.conda/envs/maptr/bin/python scripts/audit_streammapnet_temporal_readiness.py \
+  --config src/StreamMapNet/plugin/configs/mapecho_nusc_baseline_480_60x30_30e_eval.py \
+  --checkpoint ckpts/nusc_baseline_480_60x30_30e.pth \
+  --stream-ann datasets/nuScenes/nuscenes_map_infos_val.pkl \
+  --phase1-tokens /data/dj/MapEcho/artifacts/phase1/phase1_probe_tokens.txt \
+  --out /data/dj/MapEcho/artifacts/streammapnet_hook_sanity/temporal_readiness_audit.json
+```
+
+The current oldsplit checkpoint is a non-streaming baseline, so it cannot be
+used for query/BEV temporal hook or reset sanity.
+
+The original `/home/dj/StreamMapNet` tree does contain temporal NuScenes configs
+such as `plugin/configs/nusc_newsplit_480_60x30_24e.py`, and the MapEcho copy is
+in sync for the key temporal hook files. The downloaded newsplit temporal
+checkpoint is available at `ckpts/nusc_newsplit_480_60x30_24e.pth`; use
+`src/StreamMapNet/plugin/configs/mapecho_nusc_newsplit_480_60x30_24e_eval.py`
+for local clean/reset/attack sanity. This wrapper disables the extra backbone
+preload and uses batch size 1 for streaming state buffers.
+
+The official newsplit checkpoint is temporal-ready, but the existing CCS'25
+oldsplit Phase 1 set only overlaps newsplit validation in 5 / 20 frames. Treat
+oldsplit-seed runs with the newsplit checkpoint as sanity/diagnostic unless a
+newsplit-val asymmetric candidate set is rebuilt.
+
+The current split strategy is documented in
+`doc/experiment_plan_v11_newsplit_strategy.md`. Phase 1.0 hook sanity should use
+`/data/dj/MapEcho/artifacts/phase1_0_newsplit_overlap/phase1_0_overlap_tokens.txt`.
+The first clean_keep debug config is
+`src/StreamMapNet/plugin/configs/mapecho_nusc_newsplit_phase1_0_clean_keep_debug.py`.
+Run it with `bash scripts/run_phase1_0_clean_keep.sh`; this wrapper adds the CCS
+repository root to `PYTHONPATH` so the CCS-modified `mmdet3d.apis` can import
+`attack_toolkit`.
+
+Run reset sanity with `bash scripts/run_phase1_0_reset_sanity.sh`. It resets
+after target frame `t` and before `t+1`, matching the later attack recovery
+ablation timing.
+
+Run the first attack-at-t dry run with `bash scripts/run_phase1_0_attack_keep.sh`,
+then summarize clean vs attack effects with
+`bash scripts/summarize_phase1_0_attack_dry_run.sh`.
+
+Run the single-sequence attack reset ablation with
+`bash scripts/run_phase1_0_attack_reset_ablation.sh`, then summarize reduction
+ratios with `bash scripts/summarize_phase1_0_attack_reset_ablation.sh`.
+
 ## Notes
 
 - `src/StreamMapNet` was copied from `/home/dj/StreamMapNet` with the Phase 0.5
