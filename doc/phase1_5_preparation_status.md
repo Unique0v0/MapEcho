@@ -1,10 +1,10 @@
-# Phase 1.5 Controlled Experiment Preparation
+# Phase 1.5 Controlled Robustness Experiment Preparation
 
-Date: 2026-06-03
+Date: 2026-06-04
 
 ## Purpose
 
-Phase 1.5 will run a controlled experiment on the frozen
+Phase 1.5 will run a controlled robustness experiment on the frozen
 `high_quality_relaxed_v2` set from Phase 1.4.
 
 Before running the model, we prepare a lightweight visual audit package for:
@@ -16,7 +16,9 @@ top residue cases: 5
 bottom failure cases: 5
 ```
 
-No model inference is run during this preparation step.
+No model inference is run during this preparation step. The initial visual
+audit was performed on the old simplified single-camera renderer; Phase 1.5 is
+now migrated to CCS-style six-camera rendering before model execution.
 
 ## Visual Audit
 
@@ -55,7 +57,7 @@ bottom_failure_t1: 5
 Each row includes:
 
 ```text
-attack image overlay
+camera-glare image overlay
 map overlay at t
 map overlay at t+1
 map overlay at t+2
@@ -83,7 +85,9 @@ Current frozen set:
 ```text
 34 frames / 10 scenes
 W=10, L=9
-attack_power=6000
+camera_glare_power=3000
+renderer=ccs
+camera_mode=all
 ```
 
 This set is copied from:
@@ -110,7 +114,29 @@ bash scripts/summarize_phase1_5_controlled_experiment.sh
 Output root:
 
 ```text
-/data/dj/MapEcho/artifacts/phase1_5_controlled_experiment/high_quality_relaxed_v2_ablation_power6000
+/data/dj/MapEcho/artifacts/phase1_5_controlled_experiment/high_quality_relaxed_v2_ablation_ccs_renderer_power3000
+```
+
+Each target-frame perturbation annotation now writes:
+
+```text
+six rendered camera image files
+six per-camera overlays
+one six-camera rendered contact sheet
+legacy frame-t summary JSON with affected/replaced camera metadata
+```
+
+The default perturbation builder is now:
+
+```bash
+--renderer ccs --camera-mode all --power 3000
+```
+
+The old simplified renderer and single-camera mode are disabled in the
+target-frame annotation builder. The accepted mode is:
+
+```bash
+--renderer ccs --camera-mode all
 ```
 
 ## Evaluation Targets
@@ -119,7 +145,7 @@ Phase 1.5 should evaluate:
 
 ```text
 1. broad high-quality-set unconditional effect
-2. attack-effective subset conditional residue
+2. target-frame-delta subset conditional residue
 3. reset_all / reset_BEV map-level removal
 4. reset_query internal-only effect
 ```
@@ -130,6 +156,6 @@ The expected interpretation is:
 high_quality_relaxed_v2:
   broad high-quality robustness set
 
-attack-frame delta CD > 0.01 within high_quality_relaxed_v2:
+frame-t delta CD > 0.01 within high_quality_relaxed_v2:
   conditional temporal-residue mechanism subset
 ```

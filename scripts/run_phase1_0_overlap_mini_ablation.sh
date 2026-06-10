@@ -11,6 +11,8 @@ SKIP_COMPLETED=${SKIP_COMPLETED:-1}
 WARMUP=${WARMUP:-10}
 RECOVERY=${RECOVERY:-19}
 ATTACK_POWER=${ATTACK_POWER:-3000.0}
+ATTACK_RENDERER=${ATTACK_RENDERER:-ccs}
+ATTACK_CAMERA_MODE=${ATTACK_CAMERA_MODE:-all}
 
 cd /home/dj/MapEcho
 
@@ -53,7 +55,9 @@ while IFS= read -r TOKEN; do
     --out-dir "${ROOT}/attack_assets" \
     --attack-objective eta \
     --source-frame lidar \
-    --power "${ATTACK_POWER}"
+    --power "${ATTACK_POWER}" \
+    --renderer "${ATTACK_RENDERER}" \
+    --camera-mode "${ATTACK_CAMERA_MODE}"
 
   cd /home/dj/MapEcho/src/StreamMapNet
   export MPLCONFIGDIR=/tmp/mapecho_matplotlib
