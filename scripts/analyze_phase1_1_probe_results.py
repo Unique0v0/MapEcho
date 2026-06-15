@@ -91,7 +91,34 @@ def main():
 
     summary_dir = Path(args.summary_dir)
     out_dir = Path(args.out_dir)
-    assets = {row["sample_token"]: row for row in read_csv(args.asset_csv)}
+    asset_rows = read_csv(args.asset_csv)
+    assets = {row["sample_token"]: row for row in asset_rows}
+
+    explicit_primary_tokens = {
+        row["sample_token"]
+        for row in asset_rows
+        if str(row.get("is_primary_scene_sample", "")).lower() == "true"
+    }
+    if explicit_primary_tokens:
+        primary_tokens = explicit_primary_tokens
+        primary_source = "asset_csv_is_primary_scene_sample"
+    else:
+        primary_tokens = set()
+        seen_scenes = set()
+        for row in sorted(
+            asset_rows,
+            key=lambda item: (
+                item.get("scene_name", ""),
+                int(float(item.get("scene_pos", 0) or 0)),
+                item.get("sample_token", ""),
+            ),
+        ):
+            scene = row.get("scene_name", "")
+            if scene in seen_scenes:
+                continue
+            seen_scenes.add(scene)
+            primary_tokens.add(row["sample_token"])
+        primary_source = "first_scene_pos_per_scene_fallback"
 
     map_rows = read_csv(summary_dir / "overlap_map_matched_deltas_all.csv")
     internal_rows = read_csv(summary_dir / "overlap_internal_matched_reductions_all.csv")
@@ -102,7 +129,8 @@ def main():
         row["scene_name"] = asset["scene_name"]
         row["tag_confidence"] = asset.get("tag_confidence", asset.get("mapecho_tag_confidence", ""))
         row["diverge_vpa_coverage"] = asset.get("diverge_vpa_coverage", "")
-        row["is_primary_scene_sample"] = asset.get("is_primary_scene_sample", "False")
+        row["is_primary_scene_sample"] = str(row["target_token"] in primary_tokens)
+        row["primary_scene_source"] = primary_source
         conf = to_float(row["tag_confidence"])
         row["tag_confidence_group"] = (
             "high" if conf is not None and conf >= args.tag_confidence_threshold else "low_medium"

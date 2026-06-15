@@ -2,6 +2,7 @@
 import argparse
 import copy
 import csv
+import gc
 import importlib
 import json
 import os
@@ -58,6 +59,17 @@ def load_pickle(path):
         return pickle.load(f)
 
 
+def is_readable_pickle(path):
+    path = Path(path)
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    try:
+        load_pickle(path)
+        return True
+    except (EOFError, pickle.UnpicklingError, OSError):
+        return False
+
+
 def run_cmd(cmd, cwd):
     print("[MapEcho]", " ".join(str(item) for item in cmd), flush=True)
     subprocess.run([str(item) for item in cmd], cwd=str(cwd), check=True)
@@ -81,8 +93,11 @@ def build_clean_sequence(args, token, out_dir):
     token_file = out_dir / "target_token.txt"
     token_file.write_text(f"{token}\n")
     clean_ann = out_dir / "anns" / "clean_sequence_ann.pkl"
-    if clean_ann.exists() and args.skip_completed:
+    if args.skip_completed and is_readable_pickle(clean_ann):
         return clean_ann
+    if clean_ann.exists() and args.skip_completed:
+        print(f"[MapEcho] removing incomplete pickle: {clean_ann}", flush=True)
+        clean_ann.unlink()
     run_cmd(
         [
             args.python_maptr,
@@ -110,8 +125,11 @@ def build_clean_sequence(args, token, out_dir):
 def build_candidate_ann(args, clean_ann, candidate, out_dir):
     rank = int(candidate["rank"])
     ann_file = out_dir / "anns" / f"candidate_rank_{rank:03d}_sequence_ann.pkl"
-    if ann_file.exists() and args.skip_completed:
+    if args.skip_completed and is_readable_pickle(ann_file):
         return ann_file
+    if ann_file.exists() and args.skip_completed:
+        print(f"[MapEcho] removing incomplete pickle: {ann_file}", flush=True)
+        ann_file.unlink()
     run_cmd(
         [
             args.python_maptr,
@@ -195,8 +213,11 @@ def make_data_loader(cfg, ann_file):
 def run_sequence_once(args, cfg, model, ann_file, out_dir, condition):
     out_dir = Path(out_dir)
     outputs_path = out_dir / "outputs.pkl"
-    if outputs_path.exists() and args.skip_completed:
+    if args.skip_completed and is_readable_pickle(outputs_path):
         return
+    if outputs_path.exists() and args.skip_completed:
+        print(f"[MapEcho] removing incomplete pickle: {outputs_path}", flush=True)
+        outputs_path.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.save_debug:
         model.module.debug_cfg = dict(
@@ -213,21 +234,38 @@ def run_sequence_once(args, cfg, model, ann_file, out_dir, condition):
         model.module.reset_temporal_state("all")
 
     dataset, data_loader = make_data_loader(cfg, ann_file)
+    num_frames = len(dataset)
     results = []
-    prog_bar = mmcv.ProgressBar(len(dataset))
-    for data in data_loader:
-        with torch.no_grad():
-            result = model(return_loss=False, rescale=True, **data)
-        results.extend(result)
-        prog_bar.update()
-    mmcv.dump(results, outputs_path)
-    if args.format_results:
-        dataset.format_results(results, prefix=str(out_dir))
+    prog_bar = mmcv.ProgressBar(num_frames)
+    try:
+        for data in data_loader:
+            try:
+                with torch.no_grad():
+                    result = model(return_loss=False, rescale=True, **data)
+            except RuntimeError as exc:
+                if "out of memory" not in str(exc).lower():
+                    raise
+                print("[MapEcho] CUDA OOM during forward; clearing cache and retrying once.", flush=True)
+                torch.cuda.empty_cache()
+                gc.collect()
+                with torch.no_grad():
+                    result = model(return_loss=False, rescale=True, **data)
+            results.extend(result)
+            prog_bar.update()
+        mmcv.dump(results, outputs_path)
+        if args.format_results:
+            dataset.format_results(results, prefix=str(out_dir))
+    finally:
+        del data_loader
+        del dataset
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     summary = {
         "condition": condition,
         "ann_file": str(ann_file),
         "out_dir": str(out_dir),
-        "num_frames": len(dataset),
+        "num_frames": num_frames,
         "model_loaded_once": True,
         "format_results": args.format_results,
         "outputs_path": str(outputs_path),
