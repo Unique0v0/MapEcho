@@ -25,13 +25,14 @@ def main():
     parser.add_argument("--tokens-file", required=True)
     parser.add_argument("--out-csv", required=True)
     parser.add_argument("--out-tokens", required=True)
+    parser.add_argument("--asset-filename", default="ccs_model_scored_best_location_asset.csv")
     args = parser.parse_args()
 
     tokens = [line.strip() for line in Path(args.tokens_file).read_text().splitlines() if line.strip()]
     rows = []
     missing = []
     for token in tokens:
-        path = Path(args.out_root) / token / "ccs_model_scored_best_location_asset.csv"
+        path = Path(args.out_root) / token / args.asset_filename
         if not path.exists():
             missing.append(token)
             continue
@@ -51,6 +52,7 @@ def main():
         "missing": missing,
         "out_csv": args.out_csv,
         "out_tokens": args.out_tokens,
+        "asset_filename": args.asset_filename,
     }
     print(__import__("json").dumps(report, indent=2))
 

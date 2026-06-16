@@ -141,7 +141,7 @@ def build_candidate_ann(args, clean_ann, candidate, out_dir):
             "--out-dir",
             out_dir / "rendered" / f"rank_{rank:03d}",
             "--attack-objective",
-            "eta",
+            args.attack_objective,
             "--source-frame",
             "lidar",
             "--power",
@@ -358,6 +358,12 @@ def main():
     parser.add_argument("--checkpoint", default="/home/dj/MapEcho/ckpts/nusc_newsplit_480_60x30_24e.pth")
     parser.add_argument("--python-maptr", default="/home/dj/.conda/envs/maptr/bin/python")
     parser.add_argument("--max-candidates", type=int, default=20)
+    parser.add_argument(
+        "--attack-objective",
+        choices=["eta", "rsa"],
+        default="eta",
+        help="Model-scoring objective for CCS-style camera-glare location search.",
+    )
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--recovery", type=int, default=0)
     parser.add_argument("--power", type=float, default=3000.0)
@@ -413,24 +419,45 @@ def main():
         score_rows.append(row)
         write_csv(token_root / "candidate_model_scores.csv", score_rows)
 
-    score_rows.sort(
-        key=lambda row: (
-            float(row["delta_cd_to_diverge_m"]),
-            float(row["geometric_score"]),
-        ),
-        reverse=True,
-    )
+    if args.attack_objective == "eta":
+        score_rows.sort(
+            key=lambda row: (
+                float(row["delta_cd_to_diverge_m"]),
+                float(row["geometric_score"]),
+            ),
+            reverse=True,
+        )
+        objective_score_field = "streammapnet_score_delta_cd_to_diverge_m"
+        objective_score = score_rows[0]["delta_cd_to_diverge_m"]
+        has_loc_key = "has_blind_eta_loc"
+        loc_prefix = "blind_eta"
+    elif args.attack_objective == "rsa":
+        score_rows.sort(
+            key=lambda row: (
+                float(row["delta_wrong_reference_preference_m"]),
+                float(row["delta_cd_to_diverge_m"]),
+                -float(row["candidate_cd_to_reference_m"]),
+                float(row["geometric_score"]),
+            ),
+            reverse=True,
+        )
+        objective_score_field = "streammapnet_score_delta_wrong_reference_preference_m"
+        objective_score = score_rows[0]["delta_wrong_reference_preference_m"]
+        has_loc_key = "has_blind_rsa_loc"
+        loc_prefix = "blind_rsa"
+    else:
+        raise ValueError(args.attack_objective)
     best = score_rows[0]
     best_asset = {
         "sample_token": best["sample_token"],
         "scene_name": best["scene_name"],
         "scene_pos": best.get("scene_pos", ""),
-        "has_blind_eta_loc": True,
-        "blind_eta_x": best["x"],
-        "blind_eta_y": best["y"],
-        "blind_eta_z": best["z"],
+        has_loc_key: True,
+        f"{loc_prefix}_x": best["x"],
+        f"{loc_prefix}_y": best["y"],
+        f"{loc_prefix}_z": best["z"],
         "scene_json": best["scene_json"],
-        "mapecho_loc_method": "ccs_dense_streammapnet_model_scored_fast",
+        "mapecho_loc_method": f"ccs_dense_streammapnet_model_scored_fast_{args.attack_objective}",
         "ccs_dense_rank": best["rank"],
         "ccs_dense_geometric_score": best["geometric_score"],
         "streammapnet_score_delta_cd_to_diverge_m": best["delta_cd_to_diverge_m"],
@@ -439,12 +466,19 @@ def main():
         ],
         "streammapnet_score_power": args.power,
         "streammapnet_score_num_candidates": len(score_rows),
+        "streammapnet_score_objective": args.attack_objective,
+        "streammapnet_score_objective_field": objective_score_field,
+        "streammapnet_score_objective_value": objective_score,
     }
-    write_csv(token_root / "ccs_model_scored_best_location_asset.csv", [best_asset])
+    best_asset_name = f"ccs_model_scored_best_location_asset_{args.attack_objective}.csv"
+    write_csv(token_root / best_asset_name, [best_asset])
+    if args.attack_objective == "eta":
+        write_csv(token_root / "ccs_model_scored_best_location_asset.csv", [best_asset])
     summary = {
         "target_token": args.target_token,
         "out_root": str(token_root),
         "dense_candidates_csv": args.dense_candidates_csv,
+        "attack_objective": args.attack_objective,
         "num_candidates_scored": len(score_rows),
         "power": args.power,
         "warmup": args.warmup,
@@ -452,8 +486,13 @@ def main():
         "best_rank": best["rank"],
         "best_xyz_lidar": [best["x"], best["y"], best["z"]],
         "best_delta_cd_to_diverge_m": best["delta_cd_to_diverge_m"],
+        "best_delta_wrong_reference_preference_m": best[
+            "delta_wrong_reference_preference_m"
+        ],
+        "best_objective_field": objective_score_field,
+        "best_objective_value": objective_score,
         "scores_csv": str(token_root / "candidate_model_scores.csv"),
-        "best_asset_csv": str(token_root / "ccs_model_scored_best_location_asset.csv"),
+        "best_asset_csv": str(token_root / best_asset_name),
         "model_loads_per_token": 1,
         "format_results": args.format_results,
         "save_debug": args.save_debug,
