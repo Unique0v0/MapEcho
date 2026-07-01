@@ -11,6 +11,7 @@ SKIP_COMPLETED=${SKIP_COMPLETED:-1}
 WARMUP=${WARMUP:-10}
 RECOVERY=${RECOVERY:-19}
 ATTACK_POWER=${ATTACK_POWER:-3000.0}
+ATTACK_OBJECTIVE=${ATTACK_OBJECTIVE:-eta}
 ATTACK_RENDERER=${ATTACK_RENDERER:-ccs}
 ATTACK_CAMERA_MODE=${ATTACK_CAMERA_MODE:-all}
 
@@ -53,7 +54,7 @@ while IFS= read -r TOKEN; do
     --asset-csv "${ASSET_CSV}" \
     --out-ann "${ATTACK_ANN}" \
     --out-dir "${ROOT}/attack_assets" \
-    --attack-objective eta \
+    --attack-objective "${ATTACK_OBJECTIVE}" \
     --source-frame lidar \
     --power "${ATTACK_POWER}" \
     --renderer "${ATTACK_RENDERER}" \
